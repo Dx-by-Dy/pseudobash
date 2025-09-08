@@ -1,10 +1,10 @@
 // const EMPTY_ENV_PTR: [*const c_char; 1] = [ptr::null()];
 
-use libc::{c_char, close, dup2, execve, fork, pipe};
-use std::ffi::CString;
-use std::os::fd::FromRawFd;
-use std::ptr;
-use std::thread;
+use {
+    libc::{c_char, close, dup2, execve, fork, pipe},
+    pseudobash::pb_core::pipe_r,
+    std::{ffi::CString, os::fd::FromRawFd, ptr, thread},
+};
 
 struct ExecveCapture {
     command: CString,
@@ -16,24 +16,57 @@ impl ExecveCapture {
         Self { command, args }
     }
 
-    fn execute_in_thread(self) -> thread::JoinHandle<anyhow::Result<CString>> {
+    fn execute_in_thread(self) -> thread::JoinHandle<anyhow::Result<Vec<u8>>> {
         thread::spawn(move || {
-            let mut fds = [0; 2];
-            unsafe {
-                if pipe(fds.as_mut_ptr()) == -1 {
-                    todo!()
-                }
-            }
+            let mut stdout_fds = [0; 2];
+            pipe_r(&mut stdout_fds)?;
+            let (stdout_read_fd, stdout_write_fd) = (stdout_fds[0], stdout_fds[1]);
 
-            let (read_fd, write_fd) = (fds[0], fds[1]);
+            let mut stderr_fds = [0; 2];
+            pipe_r(&mut stderr_fds)?;
+            let (stderr_read_fd, stderr_write_fd) = (stderr_fds[0], stderr_fds[1]);
 
             let pid = unsafe { fork() };
             match pid {
-                -1 => todo!(),
-                0 => unsafe {
-                    dup2(write_fd, libc::STDOUT_FILENO);
-                    close(read_fd);
-                    close(write_fd);
+                -1 => anyhow::bail!("Fork failed with errno: -1"),
+                0 => {
+                    match unsafe { dup2(stdout_write_fd, libc::STDOUT_FILENO) } {
+                        -1 => anyhow::bail!("Dup2 failed with errno: -1"),
+                        _ => {}
+                    }
+
+                    match unsafe { close(stdout_read_fd) } {
+                        0 => {}
+                        _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                            *libc::__errno_location()
+                        }),
+                    }
+
+                    match unsafe { close(stdout_write_fd) } {
+                        0 => {}
+                        _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                            *libc::__errno_location()
+                        }),
+                    }
+
+                    match unsafe { dup2(stderr_write_fd, libc::STDERR_FILENO) } {
+                        -1 => anyhow::bail!("Dup2 failed with errno: -1"),
+                        _ => {}
+                    }
+
+                    match unsafe { close(stderr_read_fd) } {
+                        0 => {}
+                        _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                            *libc::__errno_location()
+                        }),
+                    }
+
+                    match unsafe { close(stderr_write_fd) } {
+                        0 => {}
+                        _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                            *libc::__errno_location()
+                        }),
+                    }
 
                     let mut args_prt: Vec<*const c_char> = vec![self.command.as_ptr()];
                     for arg in &self.args {
@@ -43,33 +76,87 @@ impl ExecveCapture {
 
                     let env: Vec<*const c_char> = vec![ptr::null()];
 
-                    match execve(args_prt[0], args_prt.as_ptr(), env.as_ptr()) {
-                        -1 => {
-                            let err = *libc::__errno_location();
-                            panic!("Error: {err}");
-                        }
+                    match unsafe { execve(args_prt[0], args_prt.as_ptr(), env.as_ptr()) } {
+                        -1 => anyhow::bail!("Execve failed with errno: {}", unsafe {
+                            *libc::__errno_location()
+                        }),
                         _ => unreachable!(),
                     }
-                },
+                }
                 _ => {
-                    unsafe {
-                        close(write_fd);
+                    match unsafe { close(stdout_write_fd) } {
+                        0 => {}
+                        _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                            *libc::__errno_location()
+                        }),
                     }
 
-                    unsafe {
-                        libc::waitpid(pid, &mut 0, 0);
+                    match unsafe { close(stderr_write_fd) } {
+                        0 => {}
+                        _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                            *libc::__errno_location()
+                        }),
                     }
 
-                    let mut file = unsafe { std::fs::File::from_raw_fd(read_fd) };
-                    let mut buffer = Vec::new();
-
-                    match std::io::Read::read_to_end(&mut file, &mut buffer) {
-                        Ok(_) => {}
-                        Err(e) => panic!("Read error: {e}"),
+                    let mut proc_status = 0;
+                    match unsafe { libc::waitpid(pid, &mut proc_status, 0) } {
+                        p if p == pid => {}
+                        errno @ _ => anyhow::bail!("Waitpid failed with errno: {errno}"),
                     }
 
-                    unsafe { close(read_fd) };
-                    CString::new(buffer).map_err(|e| anyhow::Error::new(e))
+                    match proc_status {
+                        0 => {
+                            match unsafe { close(stderr_read_fd) } {
+                                0 => {}
+                                _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                                    *libc::__errno_location()
+                                }),
+                            }
+
+                            let mut strout_file =
+                                unsafe { std::fs::File::from_raw_fd(stdout_read_fd) };
+                            let mut buffer = Vec::new();
+
+                            match std::io::Read::read_to_end(&mut strout_file, &mut buffer) {
+                                Ok(_) => match unsafe { close(stdout_read_fd) } {
+                                    0 => {}
+                                    _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                                        *libc::__errno_location()
+                                    }),
+                                },
+                                Err(e) => anyhow::bail!("Read file error: {e}"),
+                            }
+
+                            Ok(buffer)
+                        }
+                        _ => {
+                            match unsafe { close(stdout_read_fd) } {
+                                0 => {}
+                                _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                                    *libc::__errno_location()
+                                }),
+                            }
+
+                            let mut strerr_file =
+                                unsafe { std::fs::File::from_raw_fd(stderr_read_fd) };
+                            let mut buffer = Vec::new();
+
+                            match std::io::Read::read_to_end(&mut strerr_file, &mut buffer) {
+                                Ok(_) => match unsafe { close(stderr_read_fd) } {
+                                    0 => {}
+                                    _ => anyhow::bail!("Close failed with errno: {}", unsafe {
+                                        *libc::__errno_location()
+                                    }),
+                                },
+                                Err(e) => anyhow::bail!("Read file error: {e}"),
+                            }
+
+                            anyhow::bail!(
+                                "Process exited with error: {}",
+                                CString::new(buffer)?.into_string()?
+                            )
+                        }
+                    }
                 }
             }
         })
@@ -78,14 +165,17 @@ impl ExecveCapture {
 
 fn main() {
     let captures = vec![
-        ExecveCapture::new(CString::new("/usr/bin/echo").unwrap(), vec![]),
         ExecveCapture::new(
-            CString::new("/usr/bin/echo").unwrap(),
-            vec![
-                CString::new("goodbye").unwrap(),
-                CString::new("world").unwrap(),
-            ],
+            CString::new("/home/none/Rust_test/target/release/Rust_test").unwrap(),
+            vec![],
         ),
+        // ExecveCapture::new(
+        //     CString::new("/usr/bin/echo").unwrap(),
+        //     vec![
+        //         CString::new("goodbye").unwrap(),
+        //         CString::new("world").unwrap(),
+        //     ],
+        // ),
         //ExecveCapture::new("/usr/bin/whoami", &[]),
     ];
 
@@ -97,8 +187,8 @@ fn main() {
 
     for (i, thread) in threads.into_iter().enumerate() {
         match thread.join() {
-            Ok(Ok(output)) => println!("Thread {}:\n{:?}", i, output),
-            Ok(Err(e)) => eprintln!("Thread {} execution error: {}", i, e),
+            Ok(Ok(output)) => println!("Thread {}:\n{:?}", i, CString::new(output)),
+            Ok(Err(e)) => eprintln!("Thread {} execution error: \n{}", i, e),
             Err(_) => eprintln!("Thread {} killed", i),
         }
     }

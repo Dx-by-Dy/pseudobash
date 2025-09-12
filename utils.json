@@ -1,0 +1,6 @@
+[
+    {
+        "name": "echo",
+        "path": "./utils/echo/target/release/echo"
+    }
+]

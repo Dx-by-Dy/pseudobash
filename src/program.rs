@@ -51,7 +51,7 @@ impl Program {
                     buffer.push(byte);
                 }
                 _ => {
-                    anyhow::bail!(format!("Unknown symbol: {}", byte as char))
+                    anyhow::bail!(format!("Unknown symbol: {:?}", byte as char))
                 }
             }
             last_byte = byte;

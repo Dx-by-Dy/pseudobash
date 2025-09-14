@@ -8,11 +8,12 @@ pub struct Pipeline {
     delimeters: Vec<Delimeter>,
 }
 
-impl TryFrom<CString> for Pipeline {
+impl TryFrom<&mut Vec<u8>> for Pipeline {
     type Error = anyhow::Error;
 
-    fn try_from(value: CString) -> anyhow::Result<Self> {
-        let bytes = value.as_bytes_with_nul();
+    fn try_from(bytes: &mut Vec<u8>) -> anyhow::Result<Self> {
+        bytes.push(b'\n');
+
         let command_len = bytes.len();
         let mut idx = 0;
         let mut programs = Vec::new();
@@ -28,6 +29,12 @@ impl TryFrom<CString> for Pipeline {
                     programs.push(Program::try_from(line)?);
                     delimeters.push(Delimeter::Pipe);
                 }
+                b';' => {
+                    let mut line = Vec::with_capacity(buffer.capacity());
+                    std::mem::swap(&mut buffer, &mut line);
+                    programs.push(Program::try_from(line)?);
+                    delimeters.push(Delimeter::Seq);
+                }
                 _ => {
                     buffer.push(byte);
                 }
@@ -42,6 +49,14 @@ impl TryFrom<CString> for Pipeline {
             programs,
             delimeters,
         })
+    }
+}
+
+impl TryFrom<CString> for Pipeline {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CString) -> anyhow::Result<Self> {
+        Self::try_from(&mut value.as_bytes().to_vec())
     }
 }
 

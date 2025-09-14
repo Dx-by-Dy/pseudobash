@@ -1,4 +1,4 @@
 {
     "utils_path": "./utils.json",
-    "interactive": false
+    "invitation_input_symbol": ">"
 }

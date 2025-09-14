@@ -14,8 +14,8 @@ fn ive(args: Vec<String>) -> anyhow::Result<Vec<u8>> {
     }
 
     match args[1].as_str() {
-        "on" => CONFIG.set_interactive(true)?,
-        "off" => CONFIG.set_interactive(false)?,
+        "on" => CONFIG.set_interactive_mode(true)?,
+        "off" => CONFIG.set_interactive_mode(false)?,
         _ => anyhow::bail!(format!("Wrong argument: {}", args.join(" "))),
     }
 

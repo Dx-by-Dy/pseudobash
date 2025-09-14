@@ -3,7 +3,7 @@ use std::{collections::HashMap, env::vars, ffi::CString};
 pub struct Environment {
     map: HashMap<CString, CString>,
     lin: Option<Vec<CString>>,
-    current_dir: CString,
+    _current_dir: CString,
 }
 
 impl Environment {
@@ -22,7 +22,7 @@ impl Environment {
         Ok(Self {
             map,
             lin: Some(lin),
-            current_dir: current_dir.ok_or(anyhow::Error::msg("PWD var not in environment"))?,
+            _current_dir: current_dir.ok_or(anyhow::Error::msg("PWD var not in environment"))?,
         })
     }
 
@@ -41,11 +41,11 @@ impl Environment {
             .clone())
     }
 
-    pub fn get_var(&self, name: &CString) -> Option<&CString> {
-        self.map.get(name)
-    }
+    // pub fn get_var(&self, name: &CString) -> Option<&CString> {
+    //     self.map.get(name)
+    // }
 
-    pub fn current_dir(&self) -> &CString {
-        &self.current_dir
-    }
+    // pub fn current_dir(&self) -> &CString {
+    //     &self.current_dir
+    // }
 }

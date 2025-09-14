@@ -1,3 +1,4 @@
 {
-    "utils_path": "./utils.json"
+    "utils_path": "./utils.json",
+    "interactive": false
 }

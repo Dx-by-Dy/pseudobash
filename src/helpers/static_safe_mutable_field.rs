@@ -6,6 +6,10 @@ use std::{
 pub struct StaticSafeMutableField<T>(Arc<Mutex<Cell<Option<T>>>>);
 
 impl<T> StaticSafeMutableField<T> {
+    pub fn new(value: T) -> Self {
+        Self(Arc::new(Mutex::new(Cell::new(Some(value)))))
+    }
+
     pub fn apply_mut<R, F: FnOnce(&mut T) -> R>(&self, f: F) -> anyhow::Result<R> {
         let mg = self
             .0

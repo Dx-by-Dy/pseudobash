@@ -1,6 +1,10 @@
 [
     {
         "name": "echo",
-        "path": "./utils/echo/target/release/echo"
+        "path": "/home/none/pseudobash/utils/echo/target/release/echo"
+    },
+    {
+        "name": "bash",
+        "path": "/usr/bin/bash"
     }
 ]

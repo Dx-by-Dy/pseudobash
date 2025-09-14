@@ -1,5 +1,5 @@
 use {
-    libc::{close, dup2, execve, fork, pipe, waitpid},
+    libc::{close, dup2, execve, exit, fork, pipe, waitpid},
     std::{fs::File, io::Read, os::fd::FromRawFd},
 };
 
@@ -73,4 +73,8 @@ pub unsafe fn read_to_end_file_from_raw(fd: i32, buf: &mut Vec<u8>) -> anyhow::R
             Err(e) => anyhow::bail!("Read file error: {e}"),
         }
     }
+}
+
+pub unsafe fn exit_r(status: i32) {
+    unsafe { exit(status) }
 }

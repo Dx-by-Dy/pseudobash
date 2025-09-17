@@ -1,7 +1,6 @@
 use {
     crate::{
-        config::CONFIG,
-        default_utils::matcher,
+        DEFAULT_UTILS, ENVIRONMENT, SETTINGS,
         pb_core::{
             close_r, dup2_r, execve_r, exit_r, fork_r, read_to_end_file_from_raw, read_write_fd,
             wait_pid_r,
@@ -25,7 +24,7 @@ impl Executor {
         while let Some(maybe_program) = it_pipeline.next(&last_output) {
             let program = maybe_program?;
             last_output = match program.is_default() {
-                true => matcher(program)?,
+                true => DEFAULT_UTILS.with_borrow(|utils| utils.execute(program))?,
                 false => {
                     let thread_handle = unsafe { Self::execute_program_in_thread(program) };
                     match thread_handle.join() {
@@ -49,12 +48,12 @@ impl Executor {
         thread::spawn(move || {
             let [stdout_read_fd, stdout_write_fd] = unsafe { read_write_fd() }?;
             let [stderr_read_fd, stderr_write_fd] = unsafe { read_write_fd() }?;
-            let interactive = CONFIG.is_interactive()?;
+            let interactive = SETTINGS.with_borrow(|settings| settings.is_interactive());
 
             let mut args_prt: Vec<*const i8> = program.into_iter().collect();
             args_prt.push(ptr::null());
 
-            let env = CONFIG.current_env()?;
+            let env = ENVIRONMENT.with_borrow_mut(|env| env.get_env())?;
             let mut env_ptr: Vec<*const i8> = env.iter().map(|item| item.as_ptr()).collect();
             env_ptr.push(ptr::null());
 
@@ -77,7 +76,7 @@ impl Executor {
                     unsafe { close_r(stderr_read_fd) }.unwrap();
                     unsafe { close_r(stderr_write_fd) }.unwrap();
 
-                    //let env_ptr: Vec<*const i8> = vec![ptr::null()];
+                    let env_ptr: Vec<*const i8> = vec![ptr::null()];
 
                     unsafe { execve_r(args_prt[0], args_prt.as_ptr(), env_ptr.as_ptr()) }.unwrap();
                     unreachable!()

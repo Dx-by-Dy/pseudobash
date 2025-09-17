@@ -1,4 +1,4 @@
-use {crate::config::CONFIG, std::ffi::CString};
+use {crate::ENVIRONMENT, std::ffi::CString};
 
 #[derive(Debug, Default)]
 pub struct Program {
@@ -15,15 +15,8 @@ impl Program {
         self.data.get(0).is_some_and(|byte| *byte == b'@')
     }
 
-    pub fn get_default_name_and_args(&self) -> anyhow::Result<Vec<String>> {
-        if !self.is_default() {
-            anyhow::bail!("Not defaults program")
-        }
-
-        Ok(String::from_utf8_lossy(&self.data[1..self.data.len() - 1])
-            .split("\0")
-            .map(|word| word.to_string())
-            .collect())
+    pub fn get_data(self) -> Vec<u8> {
+        self.data
     }
 
     fn normalize(
@@ -42,12 +35,12 @@ impl Program {
                     if last_byte != b' ' && last_byte != b'\n' && last_byte != b'\0' {
                         buffer.push(b'\0');
                         if *with_command {
-                            CONFIG.get_full_path(buffer)?;
+                            ENVIRONMENT.with_borrow(|env| env.get_full_path(buffer))?;
                             *with_command = false;
                         }
                     }
                 }
-                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' => {
+                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'/' => {
                     buffer.push(byte);
                 }
                 _ => {

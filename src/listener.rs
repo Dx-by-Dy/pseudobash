@@ -1,38 +1,33 @@
 use {
-    crate::{config::CONFIG, executor::Executor, pipeline::Pipeline},
-    std::{
-        io::{Write, stdin, stdout},
-        thread::sleep,
-        time::Duration,
-    },
+    crate::{SETTINGS, executor::Executor, pipeline::Pipeline},
+    std::io::{Write, stdin, stdout},
 };
 
 pub struct Listener {}
 
 impl Listener {
     pub fn start() {
-        let mut buffer = String::new();
-        let mut input = Vec::new();
+        let mut input = String::new();
         loop {
-            match CONFIG.get_invitation_input() {
-                Ok(invitation_input) => print!("{} ", invitation_input),
-                Err(e) => eprintln!("{}", e),
-            }
+            print!(
+                "{} ",
+                SETTINGS.with_borrow(|settings| settings.get_invitation_input())
+            );
 
             match stdout().flush() {
                 Ok(_) => {}
                 Err(e) => eprintln!("{}", e),
             }
 
-            match stdin().read_line(&mut buffer) {
-                Ok(_) => input.append(unsafe { buffer.as_mut_vec() }),
+            match stdin().read_line(&mut input) {
+                Ok(_) => {}
                 Err(e) => {
                     eprintln!("{}", e);
                 }
             }
 
-            if input.len() > 1 && *input.last().unwrap() == b'\n' {
-                match Pipeline::try_from(&mut input) {
+            if input.len() > 1 {
+                match Pipeline::try_from(&mut input.as_bytes().to_vec()) {
                     Ok(pipeline) => match unsafe { Executor::execute_pipeline_linear(pipeline) } {
                         Ok(result) => match result.len() {
                             0 => {}
@@ -46,10 +41,7 @@ impl Listener {
                 }
             }
 
-            buffer.clear();
             input.clear();
-
-            sleep(Duration::from_millis(100));
         }
     }
 }

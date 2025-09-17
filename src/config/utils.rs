@@ -13,7 +13,7 @@ impl Utils {
                 File::open(path.to_str().expect("Bad utils path"))
                     .expect("Failed to open utils file"),
             ))
-            .expect("Failed to read utilsfile"),
+            .expect("Failed to read utils file"),
         );
         let mut index = HashMap::new();
         for (idx, utility) in utils.iter().enumerate() {

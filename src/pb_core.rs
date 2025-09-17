@@ -1,5 +1,8 @@
 use {
-    libc::{close, dup2, execve, exit, fork, pipe, waitpid},
+    libc::{
+        WEXITSTATUS, WIFEXITED, WIFSIGNALED, WTERMSIG, close, dup2, execve, exit, fork, pipe,
+        waitpid,
+    },
     std::{fs::File, io::Read, os::fd::FromRawFd},
 };
 
@@ -47,7 +50,18 @@ pub unsafe fn wait_pid_r(pid: i32) -> anyhow::Result<i32> {
     unsafe {
         let mut proc_status = 0;
         match waitpid(pid, &mut proc_status, 0) {
-            p if p == pid => Ok(proc_status),
+            p if p == pid => {
+                if WIFEXITED(proc_status) {
+                    Ok(WEXITSTATUS(proc_status))
+                } else if WIFSIGNALED(proc_status) {
+                    anyhow::bail!(format!(
+                        "Process killed by signal: {}",
+                        WTERMSIG(proc_status)
+                    ))
+                } else {
+                    anyhow::bail!("Process stopped")
+                }
+            }
             errno @ _ => anyhow::bail!("Waitpid failed with errno: {errno}"),
         }
     }

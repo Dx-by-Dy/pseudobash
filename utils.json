@@ -6,5 +6,9 @@
     {
         "name": "bash",
         "path": "/usr/bin/bash"
+    },
+    {
+        "name": "test",
+        "path": "/home/none/Rust_test/target/release/Rust_test"
     }
 ]

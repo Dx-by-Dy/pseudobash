@@ -10,8 +10,7 @@ use {
         program::Program,
     },
     std::{
-        ffi::CString,
-        panic, ptr,
+        i32, panic, ptr,
         thread::{self},
     },
 };
@@ -30,8 +29,11 @@ impl Executor {
                 false => {
                     let thread_handle = unsafe { Self::execute_program_in_thread(program) };
                     match thread_handle.join() {
-                        Ok(Ok(output)) => output,
-                        Ok(Err(e)) => anyhow::bail!("Program exited with error: \n{}", e),
+                        Ok(Ok((r_code, output))) => {
+                            println!("{}", r_code);
+                            output
+                        }
+                        Ok(Err(e)) => anyhow::bail!("Program exited with error: {}", e),
                         Err(e) => anyhow::bail!("Executor error: {:?}", e),
                     }
                 }
@@ -43,7 +45,7 @@ impl Executor {
 
     unsafe fn execute_program_in_thread(
         program: Program,
-    ) -> thread::JoinHandle<anyhow::Result<Vec<u8>>> {
+    ) -> thread::JoinHandle<anyhow::Result<(i32, Vec<u8>)>> {
         thread::spawn(move || {
             let [stdout_read_fd, stdout_write_fd] = unsafe { read_write_fd() }?;
             let [stderr_read_fd, stderr_write_fd] = unsafe { read_write_fd() }?;
@@ -95,9 +97,9 @@ impl Executor {
                                 unsafe { close_r(stdout_read_fd) }?;
                             }
 
-                            Ok(buffer)
+                            Ok((0, buffer))
                         }
-                        _ => {
+                        r_code @ _ => {
                             unsafe { close_r(stdout_read_fd) }?;
                             let mut buffer = Vec::new();
 
@@ -107,7 +109,11 @@ impl Executor {
                                 unsafe { close_r(stderr_read_fd) }?;
                             }
 
-                            anyhow::bail!(CString::new(buffer)?.into_string()?)
+                            anyhow::bail!(format!(
+                                "Exit code {} with output: {}",
+                                r_code,
+                                String::from_utf8_lossy(&buffer)
+                            ))
                         }
                     }
                 }

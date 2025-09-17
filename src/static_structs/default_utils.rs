@@ -1,6 +1,6 @@
 use {
     crate::{SETTINGS, program::Program},
-    std::collections::HashMap,
+    std::{collections::HashMap},
 };
 
 struct DefaultUtility {
@@ -57,8 +57,14 @@ fn ive(args: Vec<String>) -> anyhow::Result<Vec<u8>> {
     }
 
     match args[1].as_str() {
-        "on" => SETTINGS.with_borrow_mut(|settings| settings.set_interactive_mode(true)),
-        "off" => SETTINGS.with_borrow_mut(|settings| settings.set_interactive_mode(false)),
+        "on" => SETTINGS
+            .lock()
+            .map_err(|e| anyhow::Error::msg(e.to_string()))?
+            .set_interactive_mode(true),
+        "off" => SETTINGS
+            .lock()
+            .map_err(|e| anyhow::Error::msg(e.to_string()))?
+            .set_interactive_mode(false),
         _ => anyhow::bail!(format!("Wrong argument: {}", args.join(" "))),
     }
 

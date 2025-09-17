@@ -7,14 +7,20 @@ mod pipeline;
 mod program;
 mod static_structs;
 
-thread_local! {
-    pub static ENVIRONMENT: std::cell::RefCell<crate::static_structs::environment::Environment> = std::cell::RefCell::new(crate::static_structs::environment::Environment::default());
-}
+pub static ENVIRONMENT: std::sync::LazyLock<
+    std::sync::Mutex<crate::static_structs::environment::Environment>,
+> = std::sync::LazyLock::new(|| {
+    std::sync::Mutex::new(crate::static_structs::environment::Environment::default())
+});
 
-thread_local! {
-    pub static DEFAULT_UTILS: std::cell::RefCell<crate::static_structs::default_utils::DefaultUtils> = std::cell::RefCell::new(crate::static_structs::default_utils::DefaultUtils::default());
-}
+pub static DEFAULT_UTILS: std::sync::LazyLock<
+    std::sync::Mutex<crate::static_structs::default_utils::DefaultUtils>,
+> = std::sync::LazyLock::new(|| {
+    std::sync::Mutex::new(crate::static_structs::default_utils::DefaultUtils::default())
+});
 
-thread_local! {
-    pub static SETTINGS: std::cell::RefCell<crate::static_structs::settings::Settings> = std::cell::RefCell::new(crate::static_structs::settings::Settings::default());
-}
+pub static SETTINGS: std::sync::LazyLock<
+    std::sync::Mutex<crate::static_structs::settings::Settings>,
+> = std::sync::LazyLock::new(|| {
+    std::sync::Mutex::new(crate::static_structs::settings::Settings::default())
+});

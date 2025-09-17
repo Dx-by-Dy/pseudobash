@@ -9,10 +9,7 @@ impl Listener {
     pub fn start() {
         let mut input = String::new();
         loop {
-            print!(
-                "{} ",
-                SETTINGS.with_borrow(|settings| settings.get_invitation_input())
-            );
+            print!("{} ", SETTINGS.lock().unwrap().get_invitation_input());
 
             match stdout().flush() {
                 Ok(_) => {}

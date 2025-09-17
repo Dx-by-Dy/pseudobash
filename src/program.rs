@@ -35,7 +35,10 @@ impl Program {
                     if last_byte != b' ' && last_byte != b'\n' && last_byte != b'\0' {
                         buffer.push(b'\0');
                         if *with_command {
-                            ENVIRONMENT.with_borrow(|env| env.get_full_path(buffer))?;
+                            ENVIRONMENT
+                                .lock()
+                                .map_err(|e| anyhow::Error::msg(e.to_string()))?
+                                .get_full_path(buffer)?;
                             *with_command = false;
                         }
                     }

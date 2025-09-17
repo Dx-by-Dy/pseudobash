@@ -24,12 +24,15 @@ impl Executor {
         while let Some(maybe_program) = it_pipeline.next(&last_output) {
             let program = maybe_program?;
             last_output = match program.is_default() {
-                true => DEFAULT_UTILS.with_borrow(|utils| utils.execute(program))?,
+                true => DEFAULT_UTILS
+                    .lock()
+                    .map_err(|e| anyhow::Error::msg(e.to_string()))?
+                    .execute(program)?,
                 false => {
                     let thread_handle = unsafe { Self::execute_program_in_thread(program) };
                     match thread_handle.join() {
-                        Ok(Ok((r_code, output))) => {
-                            println!("{}", r_code);
+                        Ok(Ok((_r_code, output))) => {
+                            //println!("{}", r_code);
                             output
                         }
                         Ok(Err(e)) => anyhow::bail!("Program exited with error: {}", e),
@@ -48,12 +51,18 @@ impl Executor {
         thread::spawn(move || {
             let [stdout_read_fd, stdout_write_fd] = unsafe { read_write_fd() }?;
             let [stderr_read_fd, stderr_write_fd] = unsafe { read_write_fd() }?;
-            let interactive = SETTINGS.with_borrow(|settings| settings.is_interactive());
+            let interactive = SETTINGS
+                .lock()
+                .map_err(|e| anyhow::Error::msg(e.to_string()))?
+                .is_interactive();
 
             let mut args_prt: Vec<*const i8> = program.into_iter().collect();
             args_prt.push(ptr::null());
 
-            let env = ENVIRONMENT.with_borrow_mut(|env| env.get_env())?;
+            let env = ENVIRONMENT
+                .lock()
+                .map_err(|e| anyhow::Error::msg(e.to_string()))?
+                .get_env()?;
             let mut env_ptr: Vec<*const i8> = env.iter().map(|item| item.as_ptr()).collect();
             env_ptr.push(ptr::null());
 

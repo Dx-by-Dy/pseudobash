@@ -3,6 +3,7 @@ use {
     std::{collections::HashMap, env::vars, ffi::CString, os::unix::fs::PermissionsExt},
 };
 
+#[derive(Clone)]
 pub struct Environment {
     map: HashMap<Vec<u8>, Vec<u8>>,
     lin: Option<Vec<CString>>,
@@ -29,7 +30,7 @@ impl Environment {
     }
 
     pub fn get_full_path<'a>(&self, name: &'a mut Vec<u8>) -> anyhow::Result<&'a mut Vec<u8>> {
-        match DEFAULT_UTILS.with_borrow(|utils| utils.name_into_path(name)) {
+        match DEFAULT_UTILS.lock().map_err(|e| anyhow::Error::msg(e.to_string()))?.name_into_path(name) {
             true => Ok(name),
             false => {
                 match Self::check_executable_file(name) {

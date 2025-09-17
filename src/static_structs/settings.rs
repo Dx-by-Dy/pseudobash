@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{cell::Cell, str::FromStr};
 
 #[derive(Clone, Copy, Default, Debug)]
 enum Mode {
@@ -17,22 +17,22 @@ impl From<Mode> for String {
     }
 }
 
+#[derive(Clone)]
 pub struct Settings {
     invitation_input_symbol: String,
-    mode: Mode,
+    mode: Cell<Mode>,
 }
 
 impl Settings {
     pub fn set_interactive_mode(&mut self, value: bool) {
-        self.mode = match value {
+        self.mode.replace(match value {
             true => Mode::Interactive,
             false => Mode::Standard,
-        }
+        });
     }
 
     pub fn is_interactive(&self) -> bool {
-        println!("{:?}", self.mode);
-        match self.mode {
+        match self.mode.get() {
             Mode::Interactive => true,
             _ => false,
         }
@@ -41,7 +41,7 @@ impl Settings {
     pub fn get_invitation_input(&self) -> String {
         format!(
             "{}{}{}",
-            String::from(self.mode),
+            String::from(self.mode.get()),
             self.invitation_input_symbol,
             self.invitation_input_symbol
         )

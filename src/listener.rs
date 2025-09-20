@@ -1,15 +1,15 @@
 use {
-    crate::{SETTINGS, executor::Executor, pipeline::Pipeline},
+    crate::{executor::Executor, global_struct::GS, pipeline::Pipeline},
     std::io::{Write, stdin, stdout},
 };
 
 pub struct Listener {}
 
 impl Listener {
-    pub fn start() {
+    pub fn start(gs: &mut GS) {
         let mut input = String::new();
         loop {
-            print!("{} ", SETTINGS.lock().unwrap().get_invitation_input());
+            print!("{} ", gs.settings.get_invitation_input());
 
             match stdout().flush() {
                 Ok(_) => {}
@@ -24,19 +24,18 @@ impl Listener {
             }
 
             if input.len() > 1 {
-                match Pipeline::try_from(&mut input.as_bytes().to_vec()) {
-                    Ok(pipeline) => match unsafe { Executor::execute_pipeline_linear(pipeline) } {
-                        Ok(result) => match result.len() {
-                            0 => {}
-                            _ => println!("{}", String::from_utf8_lossy(&result)),
-                        },
-                        Err(e) => eprintln!("{}", e),
+                match unsafe {
+                    Executor::execute_pipeline_linear(Pipeline::new(input.as_bytes().to_vec()), gs)
+                } {
+                    Ok(result) => match result.len() {
+                        0 => {}
+                        _ => println!("{}", String::from_utf8_lossy(&result)),
                     },
-                    Err(e) => {
-                        eprintln!("{}", e);
-                    }
+                    Err(e) => eprintln!("Error: {}", e),
                 }
             }
+
+            //println!("{:?}", gs.environment.get_env());
 
             input.clear();
         }

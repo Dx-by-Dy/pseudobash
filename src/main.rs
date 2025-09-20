@@ -1,5 +1,6 @@
-use pseudobash::listener::Listener;
+use pseudobash::{global_struct::GS, listener::Listener};
 
 fn main() {
-    Listener::start();
+    let mut gs = GS::default();
+    Listener::start(&mut gs);
 }

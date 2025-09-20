@@ -1,6 +1,6 @@
 use {
     crate::{
-        DEFAULT_UTILS, ENVIRONMENT, SETTINGS,
+        global_struct::{GS, environment::Environment, settings::Settings},
         pb_core::{
             close_r, dup2_r, execve_r, exit_r, fork_r, read_to_end_file_from_raw, read_write_fd,
             wait_pid_r,
@@ -17,19 +17,27 @@ use {
 pub struct Executor {}
 
 impl Executor {
-    pub unsafe fn execute_pipeline_linear(pipeline: Pipeline) -> anyhow::Result<Vec<u8>> {
-        let mut it_pipeline = pipeline.into_iter();
+    pub unsafe fn execute_pipeline_linear(
+        mut pipeline: Pipeline,
+        gs: &mut GS,
+    ) -> anyhow::Result<Vec<u8>> {
         let mut last_output = Vec::new();
 
-        while let Some(maybe_program) = it_pipeline.next(&last_output) {
-            let program = maybe_program?;
+        while let Some(program) =
+            pipeline.next(&mut last_output, &mut gs.environment, &gs.default_utils)?
+        {
             last_output = match program.is_default() {
-                true => DEFAULT_UTILS
-                    .lock()
-                    .map_err(|e| anyhow::Error::msg(e.to_string()))?
-                    .execute(program)?,
+                true => gs
+                    .default_utils
+                    .execute(program, &mut gs.settings, &mut gs.environment)?,
                 false => {
-                    let thread_handle = unsafe { Self::execute_program_in_thread(program) };
+                    let thread_handle = unsafe {
+                        Self::execute_program_in_thread(
+                            program,
+                            gs.environment.clone(),
+                            gs.settings.clone(),
+                        )
+                    };
                     match thread_handle.join() {
                         Ok(Ok((_r_code, output))) => {
                             //println!("{}", r_code);
@@ -47,22 +55,18 @@ impl Executor {
 
     unsafe fn execute_program_in_thread(
         program: Program,
+        mut environment: Environment,
+        settings: Settings,
     ) -> thread::JoinHandle<anyhow::Result<(i32, Vec<u8>)>> {
         thread::spawn(move || {
             let [stdout_read_fd, stdout_write_fd] = unsafe { read_write_fd() }?;
             let [stderr_read_fd, stderr_write_fd] = unsafe { read_write_fd() }?;
-            let interactive = SETTINGS
-                .lock()
-                .map_err(|e| anyhow::Error::msg(e.to_string()))?
-                .is_interactive();
+            let interactive = settings.is_interactive();
 
             let mut args_prt: Vec<*const i8> = program.into_iter().collect();
             args_prt.push(ptr::null());
 
-            let env = ENVIRONMENT
-                .lock()
-                .map_err(|e| anyhow::Error::msg(e.to_string()))?
-                .get_env()?;
+            let env = environment.get_env()?;
             let mut env_ptr: Vec<*const i8> = env.iter().map(|item| item.as_ptr()).collect();
             env_ptr.push(ptr::null());
 

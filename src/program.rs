@@ -1,14 +1,15 @@
-use {crate::ENVIRONMENT, std::ffi::CString};
-
 #[derive(Debug, Default)]
 pub struct Program {
     data: Vec<u8>,
 }
 
 impl Program {
-    pub fn add_args(mut self, args: &Vec<u8>) -> anyhow::Result<Self> {
-        Self::normalize(args, &mut self.data, &mut false)?;
-        Ok(self)
+    pub fn new(data: Vec<u8>) -> Self {
+        Self { data }
+    }
+
+    pub fn add_args(&mut self, mut args: Vec<u8>) {
+        self.data.append(&mut args);
     }
 
     pub fn is_default(&self) -> bool {
@@ -17,76 +18,6 @@ impl Program {
 
     pub fn get_data(self) -> Vec<u8> {
         self.data
-    }
-
-    fn normalize(
-        input: &[u8],
-        buffer: &mut Vec<u8>,
-        with_command: &mut bool,
-    ) -> anyhow::Result<()> {
-        let input_len = input.len();
-        let mut idx = 0;
-        let mut last_byte = b' ';
-
-        while idx < input_len {
-            let byte = input[idx];
-            match byte {
-                b' ' | b'\n' | b'\0' => {
-                    if last_byte != b' ' && last_byte != b'\n' && last_byte != b'\0' {
-                        buffer.push(b'\0');
-                        if *with_command {
-                            ENVIRONMENT
-                                .lock()
-                                .map_err(|e| anyhow::Error::msg(e.to_string()))?
-                                .get_full_path(buffer)?;
-                            *with_command = false;
-                        }
-                    }
-                }
-                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'/' => {
-                    buffer.push(byte);
-                }
-                _ => {
-                    anyhow::bail!(format!("Unknown symbol: {:?}", byte as char))
-                }
-            }
-            last_byte = byte;
-            idx += 1
-        }
-        if buffer.last().is_some_and(|byte| *byte != b'\0') {
-            buffer.push(b'\0');
-        }
-
-        Ok(())
-    }
-}
-
-impl TryFrom<Vec<u8>> for Program {
-    type Error = anyhow::Error;
-
-    fn try_from(mut bytes: Vec<u8>) -> anyhow::Result<Self> {
-        bytes.push(b'\0');
-
-        let mut data = Vec::with_capacity(bytes.len());
-        let mut with_command = true;
-        Self::normalize(&bytes, &mut data, &mut with_command)?;
-
-        if with_command {
-            anyhow::bail!(format!(
-                "Unknown command: {:?}",
-                String::from_utf8_lossy(&data),
-            ))
-        }
-
-        Ok(Self { data })
-    }
-}
-
-impl TryFrom<CString> for Program {
-    type Error = anyhow::Error;
-
-    fn try_from(value: CString) -> anyhow::Result<Self> {
-        Self::try_from(value.as_bytes().to_vec())
     }
 }
 
@@ -141,8 +72,6 @@ impl<'a> Iterator for IterProgram<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::{ffi::CString, str::FromStr};
-
     use crate::program::Program;
 
     #[test]
@@ -167,44 +96,5 @@ mod test {
         assert_eq!(unsafe { *it.next().unwrap() } as u8, it.data[3]);
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
-    }
-
-    #[test]
-    fn check_program_tryfrom() {
-        let p = Program::try_from(CString::new("  echo 1278 ").unwrap()).unwrap();
-        assert_eq!(
-            p.data,
-            String::from_str("/home/none/pseudobash/utils/echo/target/release/echo\01278\0")
-                .unwrap()
-                .as_bytes()
-                .to_vec()
-        );
-
-        let p = Program::try_from(CString::new("  echo 1278 echo").unwrap()).unwrap();
-        assert_eq!(
-            p.data,
-            String::from_str("/home/none/pseudobash/utils/echo/target/release/echo\01278\0echo\0")
-                .unwrap()
-                .as_bytes()
-                .to_vec()
-        );
-
-        let p = Program::try_from(CString::new("echo").unwrap()).unwrap();
-        assert_eq!(
-            p.data,
-            String::from_str("/home/none/pseudobash/utils/echo/target/release/echo\0")
-                .unwrap()
-                .as_bytes()
-                .to_vec()
-        );
-
-        let p = Program::try_from(CString::new("echo @").unwrap());
-        assert!(p.is_err());
-
-        let p = Program::try_from(CString::new("").unwrap());
-        assert!(p.is_err());
-
-        let p = Program::try_from(CString::new("e").unwrap());
-        assert!(p.is_err());
     }
 }

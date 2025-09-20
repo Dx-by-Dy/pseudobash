@@ -112,59 +112,48 @@ impl Default for Environment {
         let mut map = HashMap::new();
         let mut lin = Vec::new();
         for (k, v) in vars() {
-            // if k == "PWD" {
-            //     lin.push(
-            //         CString::new(format!(
-            //             "PSEUDOBASH_PATH={v}/utils:{v}/utils/echo/target/release"
-            //         ))
-            //         .unwrap(),
-            //     );
-            //     map.insert(
-            //         "PSEUDOBASH_PATH".as_bytes().to_vec(),
-            //         format!("{v}/utils:{v}/utils/echo/target/release")
-            //             .as_bytes()
-            //             .to_vec(),
-            //     );
-            // }
             lin.push(CString::new(format!("{k}={v}")).unwrap());
             map.insert(k.as_bytes().to_vec(), v.as_bytes().to_vec());
         }
 
-        let mut file = std::fs::File::open(
-            std::env::current_exe()
-                .expect("Failed to parse current exe path")
-                .parent()
-                .expect("Failed to parse parenr directory of current exe path")
-                .join("../../.env")
-                .canonicalize()
-                .expect("Failed to canonicalize current exe path"),
-        )
-        .unwrap();
-        let mut data = String::new();
-        file.read_to_string(&mut data).unwrap();
-        for line in data.split(|sym| sym == '\n') {
-            let mut is_key = true;
-            let mut k = Vec::new();
-            let mut v = Vec::new();
-            for sym in line.as_bytes() {
-                if *sym == b'=' {
-                    is_key = false;
+        if !cfg!(test) {
+            let mut file = std::fs::File::open(
+                std::env::current_exe()
+                    .expect("Failed to parse current exe path")
+                    .parent()
+                    .expect("Failed to parse parenr directory of current exe path")
+                    .join("../.env")
+                    .canonicalize()
+                    .expect("Failed to canonicalize current exe path"),
+            )
+            .unwrap();
+            let mut data = String::new();
+            file.read_to_string(&mut data).unwrap();
+            for line in data.split(|sym| sym == '\n') {
+                let mut is_key = true;
+                let mut k = Vec::new();
+                let mut v = Vec::new();
+                for sym in line.as_bytes() {
+                    if *sym == b'=' {
+                        is_key = false;
+                        continue;
+                    }
+                    if is_key {
+                        k.push(*sym);
+                    } else {
+                        v.push(*sym);
+                    }
                 }
-                if is_key {
-                    k.push(*sym);
-                } else {
-                    v.push(*sym);
-                }
+                lin.push(
+                    CString::new(format!(
+                        "{}={}",
+                        String::from_utf8_lossy(&k),
+                        String::from_utf8_lossy(&v)
+                    ))
+                    .unwrap(),
+                );
+                map.insert(k, v);
             }
-            lin.push(
-                CString::new(format!(
-                    "{}={}",
-                    String::from_utf8_lossy(&k),
-                    String::from_utf8_lossy(&v)
-                ))
-                .unwrap(),
-            );
-            map.insert(k, v);
         }
 
         Self {

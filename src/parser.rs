@@ -109,6 +109,9 @@ impl ParserState {
                         }
                     }
                 }
+                while buffer.last().is_some_and(|byte| *byte == b'\0') {
+                    buffer.pop();
+                }
 
                 if byte == b'$' {
                     Ok(ParserStateAns::Replace(ParserState::VarGetter(
@@ -338,6 +341,14 @@ mod test {
         target.append(&mut environment.get_var("PWD").unwrap().clone());
         target.push(b'\0');
         assert_eq!(output, vec![target]);
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
+
+        let output = parser
+            .parse("  $NOTPWD\n".as_bytes(), &mut environment)
+            .unwrap();
+        assert_eq!(output.len(), 0);
         assert_eq!(parser.buffer.len(), 0);
         assert_eq!(parser.current_state, Some(ParserState::default()));
         assert_eq!(parser.state_stack.len(), 0);

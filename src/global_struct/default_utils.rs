@@ -1,10 +1,11 @@
+mod exit;
 mod ive;
 mod nop;
 
 use {
     crate::{
         global_struct::{
-            default_utils::{ive::Ive, nop::Nop},
+            default_utils::{exit::Exit, ive::Ive, nop::Nop},
             environment::Environment,
             settings::Settings,
         },
@@ -19,7 +20,7 @@ trait DefaultUtility {
         args: Vec<String>,
         settings: &mut Settings,
         environment: &mut Environment,
-    ) -> anyhow::Result<Vec<u8>>;
+    ) -> (i32, Vec<u8>, Vec<u8>);
 
     fn name_into_path(&self, name: &mut Vec<u8>);
 }
@@ -36,6 +37,8 @@ impl Default for DefaultUtils {
         index.insert(ive.name.clone(), Box::new(ive) as Box<dyn DefaultUtility>);
         let nop = Nop::default();
         index.insert(nop.name.clone(), Box::new(nop) as Box<dyn DefaultUtility>);
+        let exit = Exit::default();
+        index.insert(exit.name.clone(), Box::new(exit) as Box<dyn DefaultUtility>);
 
         Self { index }
     }
@@ -55,7 +58,7 @@ impl DefaultUtils {
         program: Program,
         settings: &mut Settings,
         environment: &mut Environment,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> (i32, Vec<u8>, Vec<u8>) {
         let input = parse_input(program.get_data());
         self.index
             .get(input[0].as_bytes())

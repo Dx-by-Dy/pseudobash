@@ -32,20 +32,20 @@ impl Pipeline {
     pub fn next(
         &mut self,
         last_output: &Vec<u8>,
-        last_status: bool,
+        last_status: i32,
         environment: &mut Environment,
         default_utils: &DefaultUtils,
     ) -> anyhow::Result<Option<(Delimeter, Program)>> {
         if self.current_line_index == self.lines.len() {
             return Ok(None);
         }
-        if !last_status {
+        if last_status != 0 {
             if !self.to_next_line() {
                 return Ok(None);
             }
         }
 
-        if self.current_index == self.lines[self.current_line_index].len() + 1 {
+        if self.current_index == self.lines[self.current_line_index].len() {
             if !self.to_next_line() {
                 return Ok(None);
             }
@@ -63,28 +63,18 @@ impl Pipeline {
                 break;
             }
         }
-        if self.current_index == self.lines[self.current_line_index].len() {
-            self.current_index += 1
-        }
         let slice = &self.lines[self.current_line_index][self.old_index..self.current_index - 1];
         self.old_index = self.current_index;
 
         let mut tokens = self.parser.parse(slice, environment)?;
+        if delimeter == Delimeter::Pipe {
+            tokens.append(&mut self.parser.parse(last_output, environment)?);
+        }
         if tokens.len() == 0 {
             tokens.push("nop\0".as_bytes().to_vec());
         }
-
         environment.get_full_path(&mut tokens[0], default_utils)?;
-        let mut program = Program::new(tokens.into_iter().flatten().collect());
-        if delimeter == Delimeter::Pipe {
-            program.add_args(
-                self.parser
-                    .parse(last_output, environment)?
-                    .into_iter()
-                    .flatten()
-                    .collect(),
-            );
-        }
+        let program = Program::new(tokens.into_iter().flatten().collect());
 
         Ok(Some((delimeter, program)))
     }
@@ -96,6 +86,7 @@ impl Pipeline {
         for byte in input {
             match byte {
                 b';' | b'\n' => {
+                    buffer.push(b'\n');
                     let mut line = Vec::with_capacity(buffer.capacity());
                     std::mem::swap(&mut line, &mut buffer);
                     output.push(line);

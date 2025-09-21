@@ -8,10 +8,6 @@ impl Program {
         Self { data }
     }
 
-    pub fn add_args(&mut self, mut args: Vec<u8>) {
-        self.data.append(&mut args);
-    }
-
     pub fn is_default(&self) -> bool {
         self.data.get(0).is_some_and(|byte| *byte == b'@')
     }

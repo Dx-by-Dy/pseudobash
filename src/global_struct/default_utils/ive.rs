@@ -11,18 +11,32 @@ impl DefaultUtility for Ive {
         args: Vec<String>,
         settings: &mut crate::global_struct::settings::Settings,
         _environment: &mut crate::global_struct::environment::Environment,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> (i32, Vec<u8>, Vec<u8>) {
         if args.len() != 2 {
-            anyhow::bail!(format!("Incorrect number of arguments: {}", args.join(" ")))
+            return (
+                -1,
+                vec![],
+                format!("Incorrect number of arguments: {}", args.join(" "))
+                    .as_bytes()
+                    .to_vec(),
+            );
         }
 
         match args[1].as_str() {
             "on" => settings.set_interactive_mode(true),
             "off" => settings.set_interactive_mode(false),
-            _ => anyhow::bail!(format!("Wrong argument: {}", args.join(" "))),
+            _ => {
+                return (
+                    -1,
+                    vec![],
+                    format!("Wrong argument: {}", args.join(" "))
+                        .as_bytes()
+                        .to_vec(),
+                );
+            }
         }
 
-        Ok(vec![])
+        (0, vec![], vec![])
     }
 
     fn name_into_path(&self, name: &mut Vec<u8>) {

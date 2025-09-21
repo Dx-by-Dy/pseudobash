@@ -3,10 +3,13 @@ use {
     std::io::{Write, stdin, stdout},
 };
 
-pub struct Listener {}
+#[derive(Default)]
+pub struct Listener {
+    executor: Executor,
+}
 
 impl Listener {
-    pub fn start(gs: &mut GS) {
+    pub fn start(&mut self, gs: &mut GS) {
         let mut input = String::new();
         loop {
             print!("{} ", gs.settings.get_invitation_input());
@@ -25,7 +28,8 @@ impl Listener {
 
             if input.len() > 1 {
                 unsafe {
-                    Executor::execute_pipeline_linear(Pipeline::new(input.as_bytes().to_vec()), gs)
+                    self.executor
+                        .execute_pipeline_linear(Pipeline::new(input.as_bytes().to_vec()), gs)
                 }
             }
 

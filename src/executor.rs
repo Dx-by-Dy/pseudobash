@@ -14,79 +14,85 @@ use {
     },
 };
 
-pub struct Executor {}
+#[derive(Default)]
+pub struct Executor {
+    last_output: Vec<u8>,
+    last_status: i32,
+}
 
 impl Executor {
-    pub unsafe fn execute_pipeline_linear(mut pipeline: Pipeline, gs: &mut GS) {
-        let mut last_output = Vec::new();
-        let mut last_status = true;
-
+    pub unsafe fn execute_pipeline_linear(&mut self, mut pipeline: Pipeline, gs: &mut GS) {
         loop {
             match pipeline.next(
-                &last_output,
-                last_status,
+                &self.last_output,
+                self.last_status,
                 &mut gs.environment,
                 &gs.default_utils,
             ) {
                 Ok(Some((delimeter, program))) => {
-                    if delimeter == Delimeter::Start && last_status && last_output.len() > 0 {
-                        println!("{}", String::from_utf8_lossy(&last_output))
+                    if delimeter == Delimeter::Start
+                        && self.last_status == 0
+                        && self.last_output.len() > 0
+                    {
+                        println!("{}", String::from_utf8_lossy(&self.last_output))
                     }
 
-                    last_output = match program.is_default() {
-                        true => match gs.default_utils.execute(
-                            program,
-                            &mut gs.settings,
-                            &mut gs.environment,
-                        ) {
-                            Ok(output) => {
-                                last_status = true;
-                                output
-                            }
-                            Err(e) => {
-                                last_status = false;
-                                eprintln!("Program exited with error: {}", e);
-                                vec![]
-                            }
-                        },
-                        false => {
-                            let thread_handle = unsafe {
-                                Self::execute_program_in_thread(
-                                    program,
-                                    gs.environment.clone(),
-                                    gs.settings.clone(),
-                                )
-                            };
-                            match thread_handle.join() {
-                                Ok(Ok((_r_code, output))) => {
-                                    last_status = true;
-                                    output
+                    match self.program_output(gs, program) {
+                        Ok((r_code, stdout, stderr)) => {
+                            if r_code == 0 {
+                                if stderr.len() > 0 {
+                                    eprintln!("{}", String::from_utf8_lossy(&stderr));
                                 }
-                                Ok(Err(e)) => {
-                                    last_status = false;
-                                    eprintln!("Program exited with error: {}", e);
-                                    vec![]
-                                }
-                                Err(e) => {
-                                    last_status = false;
-                                    eprintln!("Executor error: {:?}", e);
-                                    vec![]
-                                }
+                                self.last_status = 0;
+                                self.last_output = stdout
+                            } else {
+                                self.last_status = -1;
+                                self.last_output.clear();
+                                eprintln!("Error: {}", String::from_utf8_lossy(&stderr));
                             }
+                        }
+                        Err(e) => {
+                            self.last_status = -1;
+                            self.last_output.clear();
+                            eprintln!("Error: {}", e);
                         }
                     }
                 }
                 Ok(None) => {
-                    if last_status && last_output.len() > 0 {
-                        println!("{}", String::from_utf8_lossy(&last_output))
+                    if self.last_status == 0 && self.last_output.len() > 0 {
+                        println!("{}", String::from_utf8_lossy(&self.last_output))
                     }
+                    self.last_output.clear();
+                    self.last_status = 0;
                     return;
                 }
                 Err(e) => {
-                    last_status = false;
+                    self.last_status = -1;
+                    self.last_output.clear();
                     eprintln!("Error: {}", e);
                 }
             }
+        }
+    }
+
+    fn program_output(
+        &mut self,
+        gs: &mut GS,
+        program: Program,
+    ) -> anyhow::Result<(i32, Vec<u8>, Vec<u8>)> {
+        match program.is_default() {
+            true => Ok(gs
+                .default_utils
+                .execute(program, &mut gs.settings, &mut gs.environment)),
+            false => unsafe {
+                Self::execute_program_in_thread(
+                    program,
+                    gs.environment.clone(),
+                    gs.settings.clone(),
+                )
+                .join()
+            }
+            .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))?,
         }
     }
 
@@ -94,7 +100,7 @@ impl Executor {
         program: Program,
         mut environment: Environment,
         settings: Settings,
-    ) -> thread::JoinHandle<anyhow::Result<(i32, Vec<u8>)>> {
+    ) -> thread::JoinHandle<anyhow::Result<(i32, Vec<u8>, Vec<u8>)>> {
         thread::spawn(move || {
             let [stdout_read_fd, stdout_write_fd] = unsafe { read_write_fd() }?;
             let [stderr_read_fd, stderr_write_fd] = unsafe { read_write_fd() }?;
@@ -126,8 +132,6 @@ impl Executor {
                     unsafe { close_r(stderr_read_fd) }.unwrap();
                     unsafe { close_r(stderr_write_fd) }.unwrap();
 
-                    let env_ptr: Vec<*const i8> = vec![ptr::null()];
-
                     unsafe { execve_r(args_prt[0], args_prt.as_ptr(), env_ptr.as_ptr()) }.unwrap();
                     unreachable!()
                 }
@@ -135,36 +139,19 @@ impl Executor {
                     unsafe { close_r(stdout_write_fd) }?;
                     unsafe { close_r(stderr_write_fd) }?;
 
-                    match unsafe { wait_pid_r(pid) }? {
-                        0 => {
-                            unsafe { close_r(stderr_read_fd) }?;
-                            let mut buffer = Vec::new();
+                    let r_code = unsafe { wait_pid_r(pid) }?;
+                    let mut stdout_buffer = Vec::new();
+                    let mut stderr_buffer = Vec::new();
 
-                            if !interactive {
-                                unsafe { read_to_end_file_from_raw(stdout_read_fd, &mut buffer) }?;
-                            } else {
-                                unsafe { close_r(stdout_read_fd) }?;
-                            }
-
-                            Ok((0, buffer))
-                        }
-                        r_code @ _ => {
-                            unsafe { close_r(stdout_read_fd) }?;
-                            let mut buffer = Vec::new();
-
-                            if !interactive {
-                                unsafe { read_to_end_file_from_raw(stderr_read_fd, &mut buffer) }?;
-                            } else {
-                                unsafe { close_r(stderr_read_fd) }?;
-                            }
-
-                            anyhow::bail!(format!(
-                                "Exit code {} with output: {}",
-                                r_code,
-                                String::from_utf8_lossy(&buffer)
-                            ))
-                        }
+                    if !interactive {
+                        unsafe { read_to_end_file_from_raw(stdout_read_fd, &mut stdout_buffer) }?;
+                        unsafe { read_to_end_file_from_raw(stderr_read_fd, &mut stderr_buffer) }?;
+                    } else {
+                        unsafe { close_r(stdout_read_fd) }?;
+                        unsafe { close_r(stderr_read_fd) }?;
                     }
+
+                    Ok((r_code, stdout_buffer, stderr_buffer))
                 }
             }
         })

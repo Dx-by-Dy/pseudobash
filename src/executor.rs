@@ -5,7 +5,7 @@ use {
             close_r, dup2_r, execve_r, exit_r, fork_r, read_to_end_file_from_raw, read_write_fd,
             wait_pid_r,
         },
-        pipeline::Pipeline,
+        pipeline::{Delimeter, Pipeline},
         program::Program,
     },
     std::{
@@ -17,40 +17,77 @@ use {
 pub struct Executor {}
 
 impl Executor {
-    pub unsafe fn execute_pipeline_linear(
-        mut pipeline: Pipeline,
-        gs: &mut GS,
-    ) -> anyhow::Result<Vec<u8>> {
+    pub unsafe fn execute_pipeline_linear(mut pipeline: Pipeline, gs: &mut GS) {
         let mut last_output = Vec::new();
+        let mut last_status = true;
 
-        while let Some(program) =
-            pipeline.next(&mut last_output, &mut gs.environment, &gs.default_utils)?
-        {
-            last_output = match program.is_default() {
-                true => gs
-                    .default_utils
-                    .execute(program, &mut gs.settings, &mut gs.environment)?,
-                false => {
-                    let thread_handle = unsafe {
-                        Self::execute_program_in_thread(
-                            program,
-                            gs.environment.clone(),
-                            gs.settings.clone(),
-                        )
-                    };
-                    match thread_handle.join() {
-                        Ok(Ok((_r_code, output))) => {
-                            //println!("{}", r_code);
-                            output
-                        }
-                        Ok(Err(e)) => anyhow::bail!("Program exited with error: {}", e),
-                        Err(e) => anyhow::bail!("Executor error: {:?}", e),
+        loop {
+            match pipeline.next(
+                &last_output,
+                last_status,
+                &mut gs.environment,
+                &gs.default_utils,
+            ) {
+                Ok(Some((delimeter, program))) => {
+                    if delimeter == Delimeter::Start && last_status && last_output.len() > 0 {
+                        println!("{}", String::from_utf8_lossy(&last_output))
                     }
+
+                    last_output = match program.is_default() {
+                        true => match gs.default_utils.execute(
+                            program,
+                            &mut gs.settings,
+                            &mut gs.environment,
+                        ) {
+                            Ok(output) => {
+                                last_status = true;
+                                output
+                            }
+                            Err(e) => {
+                                last_status = false;
+                                eprintln!("Program exited with error: {}", e);
+                                vec![]
+                            }
+                        },
+                        false => {
+                            let thread_handle = unsafe {
+                                Self::execute_program_in_thread(
+                                    program,
+                                    gs.environment.clone(),
+                                    gs.settings.clone(),
+                                )
+                            };
+                            match thread_handle.join() {
+                                Ok(Ok((_r_code, output))) => {
+                                    last_status = true;
+                                    output
+                                }
+                                Ok(Err(e)) => {
+                                    last_status = false;
+                                    eprintln!("Program exited with error: {}", e);
+                                    vec![]
+                                }
+                                Err(e) => {
+                                    last_status = false;
+                                    eprintln!("Executor error: {:?}", e);
+                                    vec![]
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(None) => {
+                    if last_status && last_output.len() > 0 {
+                        println!("{}", String::from_utf8_lossy(&last_output))
+                    }
+                    return;
+                }
+                Err(e) => {
+                    last_status = false;
+                    eprintln!("Error: {}", e);
                 }
             }
         }
-
-        Ok(last_output)
     }
 
     unsafe fn execute_program_in_thread(

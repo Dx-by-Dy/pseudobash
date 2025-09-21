@@ -2,9 +2,8 @@ use crate::global_struct::environment::Environment;
 
 enum ParserStateAns {
     Nop,
-    Pop,
+    Pop(bool),
     Push(ParserState),
-    Replace(ParserState),
     Ready,
 }
 
@@ -15,6 +14,8 @@ enum ParserState {
 
     VarSetter(Vec<u8>),
     VarGetter(usize),
+    StrongSep,
+    WeakSep,
 }
 
 impl ParserState {
@@ -28,6 +29,8 @@ impl ParserState {
             ParserState::Default => Self::default_by(buffer, input),
             ParserState::VarSetter(name) => Self::var_setter_by(name, buffer, input, environment),
             ParserState::VarGetter(idx) => Self::var_getter_by(*idx, buffer, input, environment),
+            ParserState::StrongSep => Self::strong_sep(buffer, input),
+            ParserState::WeakSep => Self::weak_sep(buffer, input),
         }
     }
 
@@ -53,6 +56,8 @@ impl ParserState {
                 Ok(ParserStateAns::Push(ParserState::VarSetter(var_name)))
             }
             b'$' => Ok(ParserStateAns::Push(ParserState::VarGetter(buffer.len()))),
+            b'\'' => Ok(ParserStateAns::Push(ParserState::StrongSep)),
+            b'"' => Ok(ParserStateAns::Push(ParserState::WeakSep)),
             _ => {
                 anyhow::bail!(format!("Unknown symbol: {:?}", input as char))
             }
@@ -70,13 +75,15 @@ impl ParserState {
                 let mut var_value = Vec::with_capacity(buffer.len());
                 std::mem::swap(buffer, &mut var_value);
                 environment.set_var(name.clone(), var_value);
-                Ok(ParserStateAns::Pop)
+                Ok(ParserStateAns::Pop(false))
             }
             b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'/' | b'_' | b':' | b'=' => {
                 buffer.push(input);
                 Ok(ParserStateAns::Nop)
             }
             b'$' => Ok(ParserStateAns::Push(ParserState::VarGetter(buffer.len()))),
+            b'\'' => Ok(ParserStateAns::Push(ParserState::StrongSep)),
+            b'"' => Ok(ParserStateAns::Push(ParserState::WeakSep)),
             _ => {
                 anyhow::bail!(format!("Unknown symbol: {:?}", input as char))
             }
@@ -90,7 +97,7 @@ impl ParserState {
         environment: &mut Environment,
     ) -> anyhow::Result<ParserStateAns> {
         match input {
-            byte @ (b' ' | b'\n' | b'\0' | b'$' | b':' | b'=') => {
+            b' ' | b'\n' | b'\0' | b'$' | b':' | b'=' | b'"' | b'\'' => {
                 match environment.get_var(str::from_utf8(&buffer[index..])?) {
                     Some(value) => {
                         let mut it_val = value.into_iter();
@@ -112,19 +119,62 @@ impl ParserState {
                 while buffer.last().is_some_and(|byte| *byte == b'\0') {
                     buffer.pop();
                 }
-
-                if byte == b'$' {
-                    Ok(ParserStateAns::Replace(ParserState::VarGetter(
-                        buffer.len(),
-                    )))
-                } else {
-                    Ok(ParserStateAns::Pop)
-                }
+                Ok(ParserStateAns::Pop(false))
             }
             b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'/' | b'_' => {
                 buffer.push(input);
                 Ok(ParserStateAns::Nop)
             }
+            _ => {
+                anyhow::bail!(format!("Unknown symbol: {:?}", input as char))
+            }
+        }
+    }
+
+    fn strong_sep(buffer: &mut Vec<u8>, input: u8) -> anyhow::Result<ParserStateAns> {
+        match input {
+            b'\'' => Ok(ParserStateAns::Pop(true)),
+            b'a'..=b'z'
+            | b'A'..=b'Z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'/'
+            | b'_'
+            | b':'
+            | b' '
+            | b'\n'
+            | b'\0'
+            | b'$'
+            | b'='
+            | b'"' => {
+                buffer.push(input);
+                Ok(ParserStateAns::Nop)
+            }
+            _ => {
+                anyhow::bail!(format!("Unknown symbol: {:?}", input as char))
+            }
+        }
+    }
+
+    fn weak_sep(buffer: &mut Vec<u8>, input: u8) -> anyhow::Result<ParserStateAns> {
+        match input {
+            b'"' => Ok(ParserStateAns::Pop(true)),
+            b'a'..=b'z'
+            | b'A'..=b'Z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'/'
+            | b'_'
+            | b':'
+            | b' '
+            | b'\n'
+            | b'\0'
+            | b'=' => {
+                buffer.push(input);
+                Ok(ParserStateAns::Nop)
+            }
+            b'$' => Ok(ParserStateAns::Push(ParserState::VarGetter(buffer.len()))),
+            b'\'' => Ok(ParserStateAns::Push(ParserState::StrongSep)),
             _ => {
                 anyhow::bail!(format!("Unknown symbol: {:?}", input as char))
             }
@@ -162,6 +212,16 @@ impl Parser {
         }
         while self.apply_byte(b'\0', &mut output, environment)? != true {}
 
+        if self.state_stack.len() != 0 {
+            self.buffer.clear();
+            self.current_state = Some(ParserState::default());
+            self.state_stack.clear();
+
+            anyhow::bail!(format!(
+                "Syntax error: {:?}",
+                String::from_utf8_lossy(input)
+            ))
+        }
         Ok(output)
     }
 
@@ -178,9 +238,9 @@ impl Parser {
             .change_by(&mut self.buffer, byte, environment)?
         {
             ParserStateAns::Nop => {}
-            ParserStateAns::Pop => {
+            ParserStateAns::Pop(value) => {
                 self.current_state = self.state_stack.pop();
-                return Ok(false);
+                return Ok(value);
             }
             ParserStateAns::Push(parser_state) => self
                 .state_stack
@@ -189,9 +249,6 @@ impl Parser {
                 let mut token = Vec::with_capacity(self.buffer.capacity());
                 std::mem::swap(&mut token, &mut self.buffer);
                 output.push(token);
-            }
-            ParserStateAns::Replace(parser_state) => {
-                self.current_state.replace(parser_state);
             }
         }
         Ok(true)
@@ -307,6 +364,22 @@ mod test {
         assert_eq!(parser.buffer.len(), 0);
         assert_eq!(parser.current_state, Some(ParserState::default()));
         assert_eq!(parser.state_stack.len(), 0);
+
+        let output = parser.parse("qwe=\n".as_bytes(), &mut environment).unwrap();
+        assert_eq!(environment.get_var("qwe").unwrap(), "".as_bytes());
+        assert_eq!(output.len(), 0);
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
+
+        let output = parser
+            .parse("qwe='10$10'\n".as_bytes(), &mut environment)
+            .unwrap();
+        assert_eq!(environment.get_var("qwe").unwrap(), "10$10".as_bytes());
+        assert_eq!(output.len(), 0);
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
     }
 
     #[test]
@@ -349,6 +422,74 @@ mod test {
             .parse("  $NOTPWD\n".as_bytes(), &mut environment)
             .unwrap();
         assert_eq!(output.len(), 0);
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
+    }
+
+    #[test]
+    fn check_strong_sep() {
+        let mut environment = Environment::default();
+        let mut parser = Parser::default();
+
+        let output = parser.parse("'1'\n".as_bytes(), &mut environment).unwrap();
+        assert_eq!(output, vec!["1\0".as_bytes()]);
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
+
+        let output = parser
+            .parse("  '$PWD'\n".as_bytes(), &mut environment)
+            .unwrap();
+        assert_eq!(output, vec!["$PWD\0".as_bytes()]);
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
+
+        let output = parser
+            .parse("  '$PWD\"'\n".as_bytes(), &mut environment)
+            .unwrap();
+        assert_eq!(output, vec!["$PWD\"\0".as_bytes()]);
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
+
+        let output = parser.parse("  '$PWD\"\n".as_bytes(), &mut environment);
+        assert!(output.is_err());
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
+    }
+
+    #[test]
+    fn check_weak_sep() {
+        let mut environment = Environment::default();
+        let mut parser = Parser::default();
+
+        let output = parser
+            .parse("\"$PWD\"\n".as_bytes(), &mut environment)
+            .unwrap();
+        let mut target = environment.get_var("PWD").unwrap().clone();
+        target.push(b'\0');
+        assert_eq!(output, vec![target]);
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
+
+        let output = parser
+            .parse("'$PWD'\"$PWD\"\n".as_bytes(), &mut environment)
+            .unwrap();
+        let mut target = environment.get_var("PWD").unwrap().clone();
+        target.push(b'\0');
+        let mut t = "$PWD".as_bytes().to_vec();
+        t.append(&mut target);
+        assert_eq!(output, vec![t]);
+        assert_eq!(parser.buffer.len(), 0);
+        assert_eq!(parser.current_state, Some(ParserState::default()));
+        assert_eq!(parser.state_stack.len(), 0);
+
+        let output = parser.parse("\"$PWD\n".as_bytes(), &mut environment);
+        assert!(output.is_err());
         assert_eq!(parser.buffer.len(), 0);
         assert_eq!(parser.current_state, Some(ParserState::default()));
         assert_eq!(parser.state_stack.len(), 0);

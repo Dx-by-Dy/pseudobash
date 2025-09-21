@@ -24,14 +24,8 @@ impl Listener {
             }
 
             if input.len() > 1 {
-                match unsafe {
+                unsafe {
                     Executor::execute_pipeline_linear(Pipeline::new(input.as_bytes().to_vec()), gs)
-                } {
-                    Ok(result) => match result.len() {
-                        0 => {}
-                        _ => println!("{}", String::from_utf8_lossy(&result)),
-                    },
-                    Err(e) => eprintln!("Error: {}", e),
                 }
             }
 

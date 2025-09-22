@@ -1,8 +1,4 @@
-use crate::{
-    global_struct::{default_utils::DefaultUtils, environment::Environment},
-    parser::Parser,
-    program::Program,
-};
+use crate::{global_struct::GS, parser::Parser, program::Program};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Delimeter {
@@ -33,8 +29,7 @@ impl Pipeline {
         &mut self,
         last_output: &Vec<u8>,
         last_status: i32,
-        environment: &mut Environment,
-        default_utils: &DefaultUtils,
+        gs: &mut GS,
     ) -> anyhow::Result<Option<(Delimeter, Program)>> {
         if self.current_line_index == self.lines.len() {
             return Ok(None);
@@ -66,15 +61,21 @@ impl Pipeline {
         let slice = &self.lines[self.current_line_index][self.old_index..self.current_index - 1];
         self.old_index = self.current_index;
 
-        let mut tokens = self.parser.parse(slice, environment)?;
+        let mut tokens = self.parser.parse(slice, &mut gs.environment)?;
+        let mut stdin = Vec::new();
         if delimeter == Delimeter::Pipe {
-            tokens.append(&mut self.parser.parse(last_output, environment)?);
+            if gs.settings.mode.xargs {
+                tokens.append(&mut self.parser.parse(last_output, &mut gs.environment)?);
+            } else {
+                stdin = last_output.clone();
+            }
         }
         if tokens.len() == 0 {
             tokens.push("nop\0".as_bytes().to_vec());
         }
-        environment.get_full_path(&mut tokens[0], default_utils)?;
-        let program = Program::new(tokens.into_iter().flatten().collect());
+        gs.environment
+            .get_full_path(&mut tokens[0], &gs.default_utils)?;
+        let program = Program::new(stdin, tokens.into_iter().flatten().collect());
 
         Ok(Some((delimeter, program)))
     }

@@ -1,11 +1,12 @@
 #[derive(Debug, Default)]
 pub struct Program {
+    stdin_data: Vec<u8>,
     data: Vec<u8>,
 }
 
 impl Program {
-    pub fn new(data: Vec<u8>) -> Self {
-        Self { data }
+    pub fn new(stdin_data: Vec<u8>, data: Vec<u8>) -> Self {
+        Self { stdin_data, data }
     }
 
     pub fn is_default(&self) -> bool {
@@ -14,6 +15,12 @@ impl Program {
 
     pub fn get_data(self) -> Vec<u8> {
         self.data
+    }
+
+    pub fn flush_stdin_data(&mut self) -> Vec<u8> {
+        let mut new_stdin = Vec::new();
+        std::mem::swap(&mut new_stdin, &mut self.stdin_data);
+        new_stdin
     }
 }
 
@@ -72,9 +79,7 @@ mod test {
 
     #[test]
     fn check_program_iterator() {
-        let p = Program {
-            data: vec![2, 3, 0, 9, 0],
-        };
+        let p = Program::new(vec![], vec![2, 3, 0, 9, 0]);
         let mut it = p.into_iter();
 
         assert_eq!(unsafe { *it.next().unwrap() } as u8, it.data[0]);
@@ -82,9 +87,7 @@ mod test {
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
 
-        let p = Program {
-            data: vec![2, 0, 0, 9, 0],
-        };
+        let p = Program::new(vec![], vec![2, 0, 0, 9, 0]);
         let mut it = p.into_iter();
 
         assert_eq!(unsafe { *it.next().unwrap() } as u8, it.data[0]);

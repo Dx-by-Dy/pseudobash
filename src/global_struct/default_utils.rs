@@ -1,11 +1,11 @@
 mod exit;
-mod ive;
+mod mode;
 mod nop;
 
 use {
     crate::{
         global_struct::{
-            default_utils::{exit::Exit, ive::Ive, nop::Nop},
+            default_utils::{exit::Exit, mode::Mode, nop::Nop},
             environment::Environment,
             settings::Settings,
         },
@@ -33,8 +33,8 @@ impl Default for DefaultUtils {
     fn default() -> Self {
         let mut index = HashMap::new();
 
-        let ive = Ive::default();
-        index.insert(ive.name.clone(), Box::new(ive) as Box<dyn DefaultUtility>);
+        let mode = Mode::default();
+        index.insert(mode.name.clone(), Box::new(mode) as Box<dyn DefaultUtility>);
         let nop = Nop::default();
         index.insert(nop.name.clone(), Box::new(nop) as Box<dyn DefaultUtility>);
         let exit = Exit::default();

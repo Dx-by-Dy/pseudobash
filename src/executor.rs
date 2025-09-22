@@ -3,7 +3,7 @@ use {
         global_struct::{GS, environment::Environment, settings::Settings},
         pb_core::{
             close_r, dup2_r, execve_r, exit_r, fork_r, read_to_end_file_from_raw, read_write_fd,
-            wait_pid_r,
+            wait_pid_r, write_r,
         },
         pipeline::{Delimeter, Pipeline},
         program::Program,
@@ -23,18 +23,13 @@ pub struct Executor {
 impl Executor {
     pub unsafe fn execute_pipeline_linear(&mut self, mut pipeline: Pipeline, gs: &mut GS) {
         loop {
-            match pipeline.next(
-                &self.last_output,
-                self.last_status,
-                &mut gs.environment,
-                &gs.default_utils,
-            ) {
+            match pipeline.next(&self.last_output, self.last_status, gs) {
                 Ok(Some((delimeter, program))) => {
                     if delimeter == Delimeter::Start
                         && self.last_status == 0
                         && self.last_output.len() > 0
                     {
-                        println!("{}", String::from_utf8_lossy(&self.last_output))
+                        print!("{}", String::from_utf8_lossy(&self.last_output))
                     }
 
                     match self.program_output(gs, program) {
@@ -60,7 +55,7 @@ impl Executor {
                 }
                 Ok(None) => {
                     if self.last_status == 0 && self.last_output.len() > 0 {
-                        println!("{}", String::from_utf8_lossy(&self.last_output))
+                        print!("{}", String::from_utf8_lossy(&self.last_output))
                     }
                     self.last_output.clear();
                     self.last_status = 0;
@@ -97,15 +92,17 @@ impl Executor {
     }
 
     unsafe fn execute_program_in_thread(
-        program: Program,
+        mut program: Program,
         mut environment: Environment,
         settings: Settings,
     ) -> thread::JoinHandle<anyhow::Result<(i32, Vec<u8>, Vec<u8>)>> {
         thread::spawn(move || {
+            let [stdin_read_fd, stdin_write_fd] = unsafe { read_write_fd() }?;
             let [stdout_read_fd, stdout_write_fd] = unsafe { read_write_fd() }?;
             let [stderr_read_fd, stderr_write_fd] = unsafe { read_write_fd() }?;
-            let interactive = settings.is_interactive();
+            let interactive = settings.mode.interactive;
 
+            let mut stdin_data = program.flush_stdin_data();
             let mut args_prt: Vec<*const i8> = program.into_iter().collect();
             args_prt.push(ptr::null());
 
@@ -119,6 +116,12 @@ impl Executor {
                         eprintln!("{}", info);
                         unsafe { exit_r(-1) }
                     }));
+
+                    if !interactive {
+                        unsafe { dup2_r(stdin_read_fd, libc::STDIN_FILENO) }.unwrap();
+                    }
+                    unsafe { close_r(stdin_read_fd) }.unwrap();
+                    unsafe { close_r(stdin_write_fd) }.unwrap();
 
                     if !interactive {
                         unsafe { dup2_r(stdout_write_fd, libc::STDOUT_FILENO) }.unwrap();
@@ -138,6 +141,10 @@ impl Executor {
                 pid @ _ => {
                     unsafe { close_r(stdout_write_fd) }?;
                     unsafe { close_r(stderr_write_fd) }?;
+                    unsafe { close_r(stdin_read_fd) }?;
+
+                    unsafe { write_r(stdin_write_fd, &mut stdin_data) }?;
+                    unsafe { close_r(stdin_write_fd) }?;
 
                     let r_code = unsafe { wait_pid_r(pid) }?;
                     let mut stdout_buffer = Vec::new();

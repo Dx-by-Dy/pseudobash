@@ -1,9 +1,9 @@
 use {
     libc::{
         WEXITSTATUS, WIFEXITED, WIFSIGNALED, WTERMSIG, close, dup2, execve, exit, fork, pipe,
-        waitpid,
+        waitpid, write,
     },
-    std::{fs::File, io::Read, os::fd::FromRawFd},
+    std::{ffi::c_void, fs::File, io::Read, os::fd::FromRawFd},
 };
 
 pub unsafe fn read_write_fd() -> anyhow::Result<[i32; 2]> {
@@ -85,6 +85,15 @@ pub unsafe fn read_to_end_file_from_raw(fd: i32, buf: &mut Vec<u8>) -> anyhow::R
         match Read::read_to_end(&mut File::from_raw_fd(fd), buf) {
             Ok(_) => Ok(()),
             Err(e) => anyhow::bail!("Read file error: {e}"),
+        }
+    }
+}
+
+pub unsafe fn write_r(fd: i32, buf: &mut Vec<u8>) -> anyhow::Result<()> {
+    unsafe {
+        match write(fd, buf.as_ptr() as *const c_void, buf.len()) {
+            -1 => anyhow::bail!("Write failed with errno: {}", *libc::__errno_location()),
+            _ => Ok(()),
         }
     }
 }

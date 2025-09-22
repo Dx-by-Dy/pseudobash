@@ -46,7 +46,7 @@ impl ParserState {
                     Ok(ParserStateAns::Nop)
                 }
             }
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'/' | b'_' | b':' | b'.' => {
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'+' | b'/' | b'_' | b':' | b'.' => {
                 buffer.push(input);
                 Ok(ParserStateAns::Nop)
             }
@@ -77,7 +77,16 @@ impl ParserState {
                 environment.set_var(name.clone(), var_value);
                 Ok(ParserStateAns::Pop(false))
             }
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'/' | b'_' | b':' | b'=' | b'.' => {
+            b'a'..=b'z'
+            | b'A'..=b'Z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'+'
+            | b'/'
+            | b'_'
+            | b':'
+            | b'='
+            | b'.' => {
                 buffer.push(input);
                 Ok(ParserStateAns::Nop)
             }
@@ -121,7 +130,7 @@ impl ParserState {
                 }
                 Ok(ParserStateAns::Pop(false))
             }
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'/' | b'_' | b'.' => {
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'+' | b'/' | b'_' | b'.' => {
                 buffer.push(input);
                 Ok(ParserStateAns::Nop)
             }
@@ -138,6 +147,7 @@ impl ParserState {
             | b'A'..=b'Z'
             | b'0'..=b'9'
             | b'-'
+            | b'+'
             | b'/'
             | b'_'
             | b':'
@@ -164,6 +174,7 @@ impl ParserState {
             | b'A'..=b'Z'
             | b'0'..=b'9'
             | b'-'
+            | b'+'
             | b'/'
             | b'_'
             | b':'

@@ -1,7 +1,6 @@
-use pseudobash::{global_struct::GS, listener::Listener};
+use pseudobash::cli::CLI;
 
 fn main() {
-    let mut gs = GS::default();
-    let mut listener = Listener::default();
-    listener.start(&mut gs);
+    let mut cli = CLI::default();
+    cli.start();
 }

@@ -1,6 +1,6 @@
 use std::process::Output;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ProgramOutput {
     pub code: i32,
     pub stdout: Vec<u8>,

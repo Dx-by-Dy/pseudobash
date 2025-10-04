@@ -24,13 +24,13 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn set_interactive_mode(&mut self, value: bool) {
-        self.mode.interactive = value
-    }
+    // pub fn set_interactive_mode(&mut self, value: bool) {
+    //     self.mode.interactive = value
+    // }
 
-    pub fn set_xargs_mode(&mut self, value: bool) {
-        self.mode.xargs = value
-    }
+    // pub fn set_xargs_mode(&mut self, value: bool) {
+    //     self.mode.xargs = value
+    // }
 
     pub fn get_invitation_input(&self) -> String {
         let str_mode = String::from(self.mode);

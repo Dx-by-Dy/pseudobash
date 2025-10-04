@@ -66,3 +66,193 @@ impl CLI {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{cli::CLI, program_output::ProgramOutput};
+
+    #[test]
+    fn check_var_setter() {
+        let mut cli: CLI = CLI::default();
+
+        let output: Vec<ProgramOutput> = cli
+            .parse("  qwe=1278\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut var = "qwe".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        assert_eq!(var, "1278".as_bytes().to_vec());
+        assert_eq!(output, vec![ProgramOutput::new(0, vec![], vec![])]);
+
+        let output: Vec<ProgramOutput> = cli
+            .parse("  qwe==10\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut var = "qwe".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        assert_eq!(var, "=10".as_bytes().to_vec());
+        assert_eq!(output, vec![ProgramOutput::new(0, vec![], vec![])]);
+
+        let output: Vec<ProgramOutput> = cli
+            .parse("  qwe=qwe\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut var = "qwe".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        assert_eq!(var, "qwe".as_bytes().to_vec());
+        assert_eq!(output, vec![ProgramOutput::new(0, vec![], vec![])]);
+
+        let output: Vec<ProgramOutput> = cli
+            .parse("  qwe=\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut var = "qwe".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        assert_eq!(var, "".as_bytes().to_vec());
+        assert_eq!(output, vec![ProgramOutput::new(0, vec![], vec![])]);
+
+        let output: Vec<ProgramOutput> = cli
+            .parse("  qwe='10$10'\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut var = "qwe".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        assert_eq!(var, "10$10".as_bytes().to_vec());
+        assert_eq!(output, vec![ProgramOutput::new(0, vec![], vec![])]);
+
+        let output: Vec<ProgramOutput> = cli
+            .parse("x=$PWD\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut x = "x".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut x);
+        let mut var = "PWD".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        assert_eq!(var, x);
+        assert_eq!(output, vec![ProgramOutput::new(0, vec![], vec![])]);
+
+        let output: Vec<ProgramOutput> = cli
+            .parse("x=$PWD:9\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut x = "x".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut x);
+        let mut var = "PWD".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        var.push(b':');
+        var.push(b'9');
+        assert_eq!(var, x);
+        assert_eq!(output, vec![ProgramOutput::new(0, vec![], vec![])]);
+    }
+
+    #[test]
+    fn check_var_getter() {
+        let mut cli: CLI = CLI::default();
+
+        let output: Vec<ProgramOutput> = cli
+            .parse(" echo $PWD\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut var = "PWD".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        var.push(b'\n');
+        assert_eq!(output, vec![ProgramOutput::new(0, var, vec![])]);
+
+        let output: Vec<ProgramOutput> = cli
+            .parse(" echo $PWD $PWD\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut var = "PWD".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        var.push(b' ');
+        var.append(&mut var.clone());
+        var.last_mut().map(|byte| *byte = b'\n');
+        assert_eq!(output, vec![ProgramOutput::new(0, var, vec![])]);
+
+        let output: Vec<ProgramOutput> = cli
+            .parse(" echo $PWD$PWD\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        let mut var = "PWD".as_bytes().to_vec();
+        cli.global_state.environment.get_var(&mut var);
+        var.append(&mut var.clone());
+        var.push(b'\n');
+        assert_eq!(output, vec![ProgramOutput::new(0, var, vec![])]);
+
+        let output: Vec<ProgramOutput> = cli
+            .parse(" echo $PWDPWD\n".to_string())
+            .into_iter()
+            .map(|program| {
+                program
+                    .execute(&mut cli.global_state, &cli.inner_utils)
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(
+            output,
+            vec![ProgramOutput::new(0, "\n".as_bytes().to_vec(), vec![])]
+        );
+    }
+
+    #[test]
+    fn check_error() {
+        let mut cli: CLI = CLI::default();
+
+        let output: Vec<anyhow::Result<ProgramOutput>> = cli
+            .parse("  '1'\n".to_string())
+            .into_iter()
+            .map(|program| program.execute(&mut cli.global_state, &cli.inner_utils))
+            .collect();
+        assert!(output.iter().all(|res| res.is_err()));
+    }
+}

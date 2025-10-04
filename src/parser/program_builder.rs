@@ -20,7 +20,7 @@ impl ProgramBuilder {
             //     self.data.delimeter = Delimeter::Pipe;
             //     return Ok(Some(std::mem::take(self).data));
             // }
-            b';' => match context.arg_state {
+            b';' => match context.arg_builder_state {
                 ArgBuilderState::Default => return self.finish(context),
                 ArgBuilderState::WeakSep | ArgBuilderState::StrongSep => {}
             },
@@ -76,8 +76,8 @@ mod test {
         assert_eq!(
             result,
             vec![Program::new(vec![
-                Arg::new(vec![Token::new_default("echo")]),
-                Arg::new(vec![Token::new_default("100")])
+                Arg::new_default(vec![Token::new_default("echo")]),
+                Arg::new_default(vec![Token::new_default("100")])
             ]),]
         );
         assert_eq!(program_builder, ProgramBuilder::default());
@@ -96,9 +96,9 @@ mod test {
         assert_eq!(
             result,
             vec![Program::new(vec![
-                Arg::new(vec![Token::new_var_setter("x=100")]),
-                Arg::new(vec![Token::new_default("echo")]),
-                Arg::new(vec![Token::new_default("100")])
+                Arg::new_var_setter(vec![Token::new_default("x=100")]),
+                Arg::new_default(vec![Token::new_default("echo")]),
+                Arg::new_default(vec![Token::new_default("100")])
             ]),]
         );
         assert_eq!(program_builder, ProgramBuilder::default());
@@ -117,9 +117,9 @@ mod test {
         assert_eq!(
             result,
             vec![Program::new(vec![
-                Arg::new(vec![Token::new_default("echo")]),
-                Arg::new(vec![Token::new_default("100")]),
-                Arg::new(vec![Token::new_default("200")])
+                Arg::new_default(vec![Token::new_default("echo")]),
+                Arg::new_default(vec![Token::new_default("100")]),
+                Arg::new_default(vec![Token::new_default("200")])
             ]),]
         );
         assert_eq!(program_builder, ProgramBuilder::default());
@@ -138,9 +138,9 @@ mod test {
         assert_eq!(
             result,
             vec![Program::new(vec![
-                Arg::new(vec![Token::new_default("echo")]),
-                Arg::new(vec![Token::new_default("100")]),
-                Arg::new(vec![Token::new_default("200")])
+                Arg::new_default(vec![Token::new_default("echo")]),
+                Arg::new_default(vec![Token::new_default("100")]),
+                Arg::new_default(vec![Token::new_default("200")])
             ]),]
         );
         assert_eq!(program_builder, ProgramBuilder::default());
@@ -160,13 +160,13 @@ mod test {
             result,
             vec![
                 Program::new(vec![
-                    Arg::new(vec![Token::new_default("echo")]),
-                    Arg::new(vec![Token::new_default("100")]),
-                    Arg::new(vec![Token::new_default("200")])
+                    Arg::new_default(vec![Token::new_default("echo")]),
+                    Arg::new_default(vec![Token::new_default("100")]),
+                    Arg::new_default(vec![Token::new_default("200")])
                 ]),
                 Program::new(vec![
-                    Arg::new(vec![Token::new_default("echo")]),
-                    Arg::new(vec![Token::new_default("100")]),
+                    Arg::new_default(vec![Token::new_default("echo")]),
+                    Arg::new_default(vec![Token::new_default("100")]),
                 ])
             ]
         );
@@ -186,8 +186,8 @@ mod test {
         assert_eq!(
             result,
             vec![Program::new(vec![
-                Arg::new(vec![Token::new_default("echo")]),
-                Arg::new(vec![Token::new_default("100 200; echo 100")]),
+                Arg::new_default(vec![Token::new_default("echo")]),
+                Arg::new_default(vec![Token::new_default("100 200; echo 100")]),
             ]),]
         );
         assert_eq!(program_builder, ProgramBuilder::default());
@@ -207,17 +207,17 @@ mod test {
             result,
             vec![
                 Program::new(vec![
-                    Arg::new(vec![Token::new_default("echo")]),
-                    Arg::new(vec![Token::new_default("100")]),
-                    Arg::new(vec![Token::new_default("200")]),
+                    Arg::new_default(vec![Token::new_default("echo")]),
+                    Arg::new_default(vec![Token::new_default("100")]),
+                    Arg::new_default(vec![Token::new_default("200")]),
                 ]),
                 Program::new(vec![
-                    Arg::new(vec![Token::new_default("echo")]),
-                    Arg::new(vec![Token::new_default("100")]),
+                    Arg::new_default(vec![Token::new_default("echo")]),
+                    Arg::new_default(vec![Token::new_default("100")]),
                 ]),
                 Program::new(vec![
-                    Arg::new(vec![Token::new_default("echo")]),
-                    Arg::new(vec![Token::new_default("300")]),
+                    Arg::new_default(vec![Token::new_default("echo")]),
+                    Arg::new_default(vec![Token::new_default("300")]),
                 ])
             ]
         );
@@ -237,8 +237,8 @@ mod test {
         assert_eq!(
             result,
             vec![Program::new(vec![
-                Arg::new(vec![Token::new_default("echo")]),
-                Arg::new(vec![Token::new_var_getter("x")]),
+                Arg::new_default(vec![Token::new_default("echo")]),
+                Arg::new_default(vec![Token::new_var_getter("x")]),
             ]),]
         );
         assert_eq!(program_builder, ProgramBuilder::default());
@@ -257,8 +257,8 @@ mod test {
         assert_eq!(
             result,
             vec![Program::new(vec![
-                Arg::new(vec![Token::new_var_setter("x=100")]),
-                Arg::new(vec![Token::new_var_setter("x=100")]),
+                Arg::new_var_setter(vec![Token::new_default("x=100")]),
+                Arg::new_var_setter(vec![Token::new_default("x=100")]),
             ]),]
         );
         assert_eq!(program_builder, ProgramBuilder::default());
